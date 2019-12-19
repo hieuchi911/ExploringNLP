@@ -9,7 +9,7 @@ Created on Wed Nov 27 20:24:28 2019
 from nltk.tokenize import word_tokenize
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-import random
+#import random
 
 class word2vecClass():
     def __init__(self, settings):
@@ -60,10 +60,22 @@ class word2vecClass():
                 y_pred, h, u = self.forward_pass(w_t)
                 EI = np.sum([np.subtract(y_pred, word) for word in w_c], axis = 0) # Sum of differences between predicted y and correct w_c in context array corresponding to w_t
                 self.backprop(EI, h, w_t)   # Modify w1 and w2 accordingly to the correct w_c's
-                self.loss += -np.sum([u[word.index(1)] for word in w_c]) + len(w_c)*np.log(np.sum(np.exp(u)))
+                self.loss += -np.sum([u[word.index(1)] for word in w_c]) + len(w_c) * np.log(np.sum(np.exp(u)))
             print("Epoch: " + str(i) + " Loss: " + str(self.loss))
-            
-                
+        
+    def backprop(self, e, h, x):
+        # https://docs.scipy.org/doc/numpy-1.15.1/reference/generated/numpy.outer.html
+        # Column vector EI represents row-wise sum of prediction errors across each context word for the current center word
+        # Going backwards, we need to take derivative of E with respect of w2
+        # h - shape 10x1, e - shape 9x1, dl_dw2 - shape 10x9
+        dl_dw2 = np.outer(h, e)
+        # x - shape 1x8, w2 - 5x8, e.T - 8x1
+        # x - 1x8, np.dot() - 5x1, dl_dw1 - 8x5
+        dl_dw1 = np.outer(x, np.dot(self.w2, e.T))
+        # Update weights
+        self.w1 = self.w1 - (self.lr * dl_dw1)
+        self.w2 = self.w2 - (self.lr * dl_dw2)
+    """
     def backprop(self, e, h, x):
         dl_dw2 = np.outer(h, e)
         dl_dw1 = np.outer(x, np.dot(self.w2, e.T))
@@ -76,6 +88,7 @@ class word2vecClass():
         for word in randomWords:
             self.w1[self.wordIndex[word]] = self.w1[self.wordIndex[word]] - (self.lr*dl_dw1[self.wordIndex[word]])
             self.w2[:self.wordIndex[word]] = self.w2[:self.wordIndex[word]] - (self.lr*dl_dw2[:self.wordIndex[word]])
+    """
         
     def forward_pass(self, target):
         h = np.dot(self.w1.T, target)
@@ -109,6 +122,7 @@ class word2vecClass():
                 continue
         words_sorted = sorted(word_sim.items(), key = lambda kv: kv[1], reverse=True)
         print("Original word: " + word)
+        print("Expected: cats " + str(word_sim["cats"]))
         for word1, sim in words_sorted[:top_n]:
             print(word1, sim)
     
@@ -164,8 +178,8 @@ print("Finish cleaning\n")
 settings = {
 	'window_size': 2,      	# context window +- center word
 	'n': 100,	         	# dimensions of word embeddings, also refer to size of hidden layer
-	'epochs': 5,	     	# number of training epochs
-	'learning_rate': 0.01	# learning rate
+	'epochs': 15,	     	# number of training epochs
+	'learning_rate': 0.001	# learning rate
 }
 
 
@@ -176,7 +190,7 @@ print("Finished generating training data.......\n")
 print("Let's train now !!!\n\n")
 word2vecAlg.train(trainingData)
 print("Done training now wooooohh !!!\n\n")
-word2vecAlg.vec_sim("cats", 3)
+word2vecAlg.vec_sim("dogs", 3)
 
 
 #==============================================================================
