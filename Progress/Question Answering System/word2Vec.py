@@ -27,6 +27,7 @@ class word2vecClass():
         self.wordIndex = {}
         self.indexWord = {}
     
+    
     def tokenizeCorpus(self):
         self.tokenizedCorpus = word_tokenize(self.corpus)
     
@@ -49,17 +50,18 @@ class word2vecClass():
                 self.cleanToken.append(sentence)
             elif word not in weirdlist:
                 sentence.append(word)
-                    
+        self.buildIndexFromWord()
+        self.buildWordFromIndex()
         
         
     def generate_training_data(self):
         print("In function generate_training_data\n")
-        m = 0
+        """ m = 0
         for i in self.vocabulary:
             self.wordIndex[i] = m
             m += 1
         for j in range(len(self.vocabulary)):
-            self.indexWord[j] = self.vocabulary[j]
+            self.indexWord[j] = self.vocabulary[j]"""
         # Find unique word counts using dictionary
         training_data = []
         w_target = []
@@ -75,8 +77,20 @@ class word2vecClass():
                 training_data.append([w_target, w_context])
         print("Done for loop of function generate_training_data\n")
         return np.array(training_data)
+       
+    def buildIndexFromWord(self):
+        m = 0
+        for i in self.vocabulary:
+            self.wordIndex[i] = m
+            m += 1    
                 
-                
+    def buildWordFromIndex(self):
+        for j in range(len(self.vocabulary)):
+            self.indexWord[j] = self.vocabulary[j]
+    
+    def getIndexFromWord(self, word):
+        return self.wordIndex[word]
+        
     def word2onehot(self, word):
         word_vec = [0 for i in range(0, len(self.vocabulary))]
         word_vec[self.wordIndex[word]] = 1
@@ -139,7 +153,7 @@ class word2vecClass():
         return uSoftmaxed"""
     
     def vec_sim(self, word, top_n):
-        v_w1 = self.w1[self.wordIndex[word]]
+        v_w1 = self.w1[self.wordIndex[word]] # embedding for the word 'word' is a row vector from matrix w1. Matrix w1 has the shape of (num_words, n), with n predefined in settings
         word_sim = {}
         for m in range(len(self.vocabulary)):
             if self.vocabulary[m] != word:
@@ -174,7 +188,7 @@ if __name__ == "__main__":
     settings = {
 	    'window_size': 2,      	# context window +- center word
 	    'n': 100,	         	# dimensions of word embeddings, also refer to size of hidden layer
-	    'epochs': 10,	     	# number of training epochs
+	    'epochs': 1,	     	# number of training epochs
 	    'learning_rate': 0.001	# learning rate
     }
 
@@ -182,13 +196,16 @@ if __name__ == "__main__":
     word2vecAlg = word2vecClass(settings, corpus)
     word2vecAlg.tokenizeCorpus()
     word2vecAlg.buildVocabulary()
-    print("\n\n\n\n\n" + str(word2vecAlg.vocabulary[12]))
     print("Generating training data!!\n")
     trainingData = word2vecAlg.generate_training_data()
     print("Finished generating training data.......\n")
     print("Let's train now !!!\n\n")
     word2vecAlg.train(trainingData)
+    print(word2vecAlg.getIndexFromWord("the"))
     print("Done training now wooooohh !!!\n\n")
+    print(np.shape((word2vecAlg.w1)))
+    print(np.shape(word2vecAlg.w2))
+    
     word2vecAlg.vec_sim(word2vecAlg.vocabulary[2], 3)
     
 

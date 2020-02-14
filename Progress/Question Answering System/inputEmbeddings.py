@@ -8,6 +8,7 @@ Created on Mon Feb 10 08:31:56 2020
 from word2Vec import word2vecClass
 import json
 import tensorflow as tf
+import numpy as np
 
 class inputEmbeddings():
     def __init__(self, context, query): # query here is a list of questions, so we need to traverse through the list
@@ -48,9 +49,11 @@ if __name__ == "__main__":
                 print(query["question"])
                 inputing = inputEmbeddings(context["context"], query["question"])
                 inputing.generateWord2VecInput()
+                print(np.shape(inputing.contextEmbedding))
+                print(np.shape(inputing.queryEmbedding))
                 #contextBiLstmModel = biLstmClass(inputing.contextEmbedding)
                 #queryBiLstmModel = biLstmClass(inputing.queryEmbedding)
-                tf.keras.layers.Bidirectional()
+            
                 
     
     
