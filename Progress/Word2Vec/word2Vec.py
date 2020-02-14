@@ -9,53 +9,98 @@ Created on Wed Nov 27 20:24:28 2019
 from nltk.tokenize import word_tokenize
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-#import random
+
 
 class word2vecClass():
-    def __init__(self, settings):
+    def __init__(self, settings, corpus):
         self.n = settings['n']
         self.lr = settings['learning_rate']
         self.epochs = settings['epochs']
-        self.window = settings['window_size']    
-    
-    def generate_training_data(self, tokenizedCorpus):
-        print("In function generate_training_data\n")
+        self.window = settings['window_size']
+        self.vocabulary = []
+        self.cleanToken = []
+        self.corpus = corpus
+        self.tokenizedCorpus = []
+        self.w1 = 0
+        self.w2 = 0
+        self.loss = 0
         self.wordIndex = {}
         self.indexWord = {}
-        m = 0
-        for i in vocabulary:
+    
+    
+    def tokenizeCorpus(self):
+        self.tokenizedCorpus = word_tokenize(self.corpus)
+    
+    def buildVocabulary(self):
+        # Building vocabulary from the corpus
+        weirdlist = [".", ",", "'","\"", "!", "?", "'", "-", "[", "]", ":", "''", "``", ")", "("]
+        print("Building vocabulary\n\n")
+        for word in self.tokenizedCorpus:
+            if word not in self.vocabulary:
+                if word not in weirdlist:
+                    self.vocabulary.append(word)
+                else:
+                    continue
+            else:
+                continue
+        sentence = []
+        for word in self.tokenizedCorpus:
+            # The dot "." is used to indicate end of a sentence, which will stop the generator from continuing generating words
+            if word == ".":
+                self.cleanToken.append(sentence)
+            elif word not in weirdlist:
+                sentence.append(word)
+        self.buildIndexFromWord()
+        self.buildWordFromIndex()
+        
+        
+    def generate_training_data(self):
+        print("In function generate_training_data\n")
+        """ m = 0
+        for i in self.vocabulary:
             self.wordIndex[i] = m
             m += 1
-        for j in range(len(vocabulary)):
-            self.indexWord[j] = vocabulary[j]
+        for j in range(len(self.vocabulary)):
+            self.indexWord[j] = self.vocabulary[j]"""
         # Find unique word counts using dictionary
         training_data = []
         w_target = []
         print("In for loop of function generate_training_data\n")
         #for w in tokenizedCorpus:
-        for sentence in tokenizedCorpus:
+        for sentence in self.cleanToken:
             for i, word in enumerate(sentence):
                 w_target = self.word2onehot(word)
                 w_context = []
                 for j in range(i-self.window, i+self.window+1):
                     if j!=i and j>=0 and j<len(sentence):
                         w_context.append(self.word2onehot(sentence[j]))
-                        training_data.append([w_target, w_context])
+                training_data.append([w_target, w_context])
         print("Done for loop of function generate_training_data\n")
         return np.array(training_data)
+       
+    def buildIndexFromWord(self):
+        m = 0
+        for i in self.vocabulary:
+            self.wordIndex[i] = m
+            m += 1    
                 
-                
+    def buildWordFromIndex(self):
+        for j in range(len(self.vocabulary)):
+            self.indexWord[j] = self.vocabulary[j]
+    
+    def getIndexFromWord(self, word):
+        return self.wordIndex[word]
+        
     def word2onehot(self, word):
-        word_vec = [0 for i in range(0, len(vocabulary))]
+        word_vec = [0 for i in range(0, len(self.vocabulary))]
         word_vec[self.wordIndex[word]] = 1
         return word_vec
     
     def train(self, training_data):
-        self.w1 = np.random.uniform(-1, 1, (len(vocabulary), self.n))
-        self.w2 = np.random.uniform(-1, 1, (self.n, len(vocabulary)))
+        self.w1 = np.random.uniform(-1, 1, (len(self.vocabulary), self.n))
+        self.w2 = np.random.uniform(-1, 1, (self.n, len(self.vocabulary)))
         
         for i in range(self.epochs):
-            self.loss = 0
             for w_t, w_c in training_data:
                 y_pred, h, u = self.forward_pass(w_t)
                 EI = np.sum([np.subtract(y_pred, word) for word in w_c], axis = 0) # Sum of differences between predicted y and correct w_c in context array corresponding to w_t
@@ -81,8 +126,8 @@ class word2vecClass():
         dl_dw1 = np.outer(x, np.dot(self.w2, e.T))
         randomWords = []
         for i in range(5):
-            a = random.randint(0, len(vocabulary)-1)
-            randomWords.append(vocabulary[a])
+            a = random.randint(0, len(self.vocabulary)-1)
+            randomWords.append(self.vocabulary[a])
         self.w1[x.index(1)] = self.w1[x.index(1)] - (self.lr*dl_dw1[x.index(1)])
         self.w2[:x.index(1)] = self.w2[:x.index(1)] - (self.lr*dl_dw2[:x.index(1)])
         for word in randomWords:
@@ -108,21 +153,21 @@ class word2vecClass():
         return uSoftmaxed"""
     
     def vec_sim(self, word, top_n):
-        v_w1 = self.w1[self.wordIndex[word]]
+        v_w1 = self.w1[self.wordIndex[word]] # embedding for the word 'word' is a row vector from matrix w1. Matrix w1 has the shape of (num_words, n), with n predefined in settings
         word_sim = {}
-        for m in range(len(vocabulary)):
-            if vocabulary[m] != word:
-                v_w2 = self.w1[self.wordIndex[vocabulary[m]]]
+        for m in range(len(self.vocabulary)):
+            if self.vocabulary[m] != word:
+                v_w2 = self.w1[self.wordIndex[self.vocabulary[m]]]
                 v_w1a = v_w1.reshape(1, self.n)
                 v_w2a = v_w2.reshape(1, self.n)
                 cos_lib = cosine_similarity(v_w1a, v_w2a) 
-                theWord = vocabulary[m]
+                theWord = self.vocabulary[m]
                 word_sim[theWord] = cos_lib
             else:
+                cos_lib = cosine_similarity(v_w1a, v_w2a) 
                 continue
         words_sorted = sorted(word_sim.items(), key = lambda kv: kv[1], reverse=True)
         print("Original word: " + word)
-        print("Expected: cats " + str(word_sim["cats"]))
         for word1, sim in words_sorted[:top_n]:
             print(word1, sim)
     
@@ -136,62 +181,33 @@ class word2vecClass():
     
     
 #===================================================================================================================
-file = open("testdoc.txt", "r")
-corpus = file.read()
-print("Finish reading\n")
-tokenized = word_tokenize(corpus)
-print("Finish tokenizing\n")
-
-# Building vocabulary from the corpus
-vocabulary = []
-weirdlist = [".", ",", "'","\"", "!", "?", "'", "-", "[", "]", ":", "\"", "''", "``", ")", "("] # The dot "." is not included since it must be used to indicate end of a sentence, which will stop the generator from continuing generating words
-print("Building vocabulary\n\n")
-for word in tokenized:
-    if word not in vocabulary:
-        if word not in weirdlist:
-            vocabulary.append(word)
-        else:
-            continue
-    else:
-        continue
-# Clean tokenized, result in an array of words only
-print("Vocabulary has " + str(len(vocabulary)) + " words")
-print("Cleaning tokenized corpus.......\n")
-weirdlist2 = [",", "'","\"", "!", "?", "'", "-", "[", "]", ":", "''", "``", ")", "("] 
-cleanToken = []
-temp = []
-sentence = []
-i = 1
-for word in tokenized:
-    if word not in weirdlist2:
-        temp.append(word)
-for word in temp:
-    if word != ".":
-        sentence.append(word)
-    else:
-        cleanToken.append(sentence)
-        i+=1
-        continue
-        
-print("Finish cleaning\n")
-# Defining hyperparameters
-settings = {
-	'window_size': 2,      	# context window +- center word
-	'n': 100,	         	# dimensions of word embeddings, also refer to size of hidden layer
-	'epochs': 15,	     	# number of training epochs
-	'learning_rate': 0.001	# learning rate
-}
+if __name__ == "__main__":
+    file = open("testdoc.txt", "r")
+    corpus = file.read()
+    print("Finish reading\n")
+    settings = {
+	    'window_size': 2,      	# context window +- center word
+	    'n': 100,	         	# dimensions of word embeddings, also refer to size of hidden layer
+	    'epochs': 1,	     	# number of training epochs
+	    'learning_rate': 0.001	# learning rate
+    }
 
 
-word2vecAlg = word2vecClass(settings)
-print("Generating training data!!\n")
-trainingData = word2vecAlg.generate_training_data(cleanToken)
-print("Finished generating training data.......\n")
-print("Let's train now !!!\n\n")
-word2vecAlg.train(trainingData)
-print("Done training now wooooohh !!!\n\n")
-word2vecAlg.vec_sim("dogs", 3)
-
+    word2vecAlg = word2vecClass(settings, corpus)
+    word2vecAlg.tokenizeCorpus()
+    word2vecAlg.buildVocabulary()
+    print("Generating training data!!\n")
+    trainingData = word2vecAlg.generate_training_data()
+    print("Finished generating training data.......\n")
+    print("Let's train now !!!\n\n")
+    word2vecAlg.train(trainingData)
+    print(word2vecAlg.getIndexFromWord("the"))
+    print("Done training now wooooohh !!!\n\n")
+    print(np.shape((word2vecAlg.w1)))
+    print(np.shape(word2vecAlg.w2))
+    
+    word2vecAlg.vec_sim(word2vecAlg.vocabulary[2], 3)
+    
 
 #==============================================================================
 
@@ -207,4 +223,18 @@ for i in vocabulary:
             continue
     frequency[i] = a
     a = 0
+
+# Clean tokenized, result in an array of words only
+print("Cleaning tokenized corpus.......\n")
+cleanToken = []
+sentence = []
+i = 1
+for word in vocabulary:
+    if word != ".":
+        sentence.append(word)
+    else:
+        cleanToken.append(sentence)
+        i+=1
+        continue
+        
 """

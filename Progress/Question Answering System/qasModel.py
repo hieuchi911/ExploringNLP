@@ -75,8 +75,7 @@ for topic in data["data"]:
     np_Context = np.asarray(training_context_data, dtype = np.float32) # np_Context here is the context input training_data that will be passed to the fit function of Keras Model
 """
 a = 0
-for context in data["data"][0]["paragraphs"][0:1]:
-    print(context["context"])
+for context in data["data"][0]["paragraphs"][0:2]:
     if a==1:
         break
     ContextCorpus += " " + context["context"]
@@ -87,31 +86,28 @@ for context in data["data"][0]["paragraphs"][0:1]:
         else:
             continue
         a+=1
-print(ContextCorpus)
+print("_______________________CONTEXTS__________________________ \n\n" + ContextCorpus)
 print(type(ContextCorpus))
 
-print(QueryCorpus)
+print("_______________________QUERIES__________________________ \n\n" + QueryCorpus)
 print(type(QueryCorpus))
 
 wordEmbeddingContext = word2vecClass(settings, ContextCorpus)
 wordEmbeddingContext.tokenizeCorpus()
 wordEmbeddingContext.buildVocabulary()
 wordEmbeddingContext.train(wordEmbeddingContext.generate_training_data())
-print(wordEmbeddingContext.vocabulary)
 # wordEmbeddingContext.w1 now contains num_word row vectors, each of which has a size of settings["n"]
-word = "became"
-index = wordEmbeddingContext.getIndexFromWord(word)
-print(index)
+
 wordEmbeddingQuery = word2vecClass(settings, QueryCorpus)
 wordEmbeddingQuery.tokenizeCorpus()
 wordEmbeddingQuery.buildVocabulary()
 wordEmbeddingQuery.train(wordEmbeddingQuery.generate_training_data())
 # wordEmbeddingQuery.w1 now contains num_word row vectors, each of which has a size of settings["n"]
+
 training_context_data = []
 training_query_data = []
-
+test=""
 for i in range(1):
-    i=1
     for context in data["data"][0]["paragraphs"][0:1]:
         
         # Create word2vec embedding for a Context
@@ -119,26 +115,24 @@ for i in range(1):
         for word in Context:
             # append a word vector from wordEmbeddingContext by taking the row of w1 at "proper "index. 
             # Also, w1 shape is (num_words, d = n) so we have to take transpose of w1, then convert np.ndarray to list, so we can subsequently convert the list to tensor
-            inputContext.append(wordEmbeddingContext.w1[wordEmbeddingContext.getIndexFromWord(word)].T)
+            inputContext.append(wordEmbeddingContext.w1[wordEmbeddingContext.getIndexFromWord(word)].T.tolist())
         training_context_data.append(inputContext)
         print(context["context"])
-        if i==3:
-            break
         # For each of queries about given Context, create word2vec embedding for that query
         for query in context["qas"]:
+            test += query["question"]
             Query = tokenizeCorpus(query["question"])
             for word in Query:
                 # append a word vector from wordEmbeddingContext by taking the row of w1 at "proper "index. 
                 # Also, w1 shape is (num_words, d = n) so we have to take transpose of w1, then convert np.ndarray to list, so we can subsequently convert the list to tensor
                 inputQuery.append(wordEmbeddingQuery.w1[wordEmbeddingQuery.wordIndex[word]].T.tolist())
             training_query_data.append(inputQuery)
-            i+=1
-            if i==3:
-                break
-            print(query["question"])
+        print("--------------Concatenated queries:\n\n\n" + test + "\n")
         np_Query = np.asarray(training_query_data, dtype = np.float32) # inputQuery here is the query input training_data that will be passed to the fit function of Keras Model
+        np_Query = np.transpose(np_Query, (0, 2, 1)) # The 3 dimenstions of each query matrix is initially shape(num_)
     np_Context = np.asarray(training_context_data, dtype = np.float32) # np_Context here is the context input training_data that will be passed to the fit function of Keras Model
-
+    np_Context = np.transpose(np_Context, (0, 2, 1))
+    
 print(np.shape(np_Context))
 print(np.shape(np_Query))
 # Define inputs embeddings:
@@ -159,6 +153,6 @@ bidirectional_query = tf.keras.layers.Bidirectional(lstm_query)(query_inputs) # 
 x = tf.keras.layers.concatenate([bidirectional_context, bidirectional_query])
 
 model = tf.keras.Model(inputs = [context_inputs, query_inputs], outputs = x)
-model.compile()
-model.fit(np_Context, np_Query, epochs = 3)
+model.compile(optimizer = tf.keras.optimizers.RMSprop(1e-3), loss = tf.keras.losses.BinaryCrossentropy(from_logits=True))
+model.fit({"context_inputs": np.transpose(np_Context, (0, 2, 1)), "query_inputs": np.transpose(np_Query, (0, 2, 1))}, epochs = 3)
 #S = 
