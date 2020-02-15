@@ -7,7 +7,6 @@ Created on Tue Feb 11 13:34:14 2020
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import layers
 import json
 from word2Vec import word2vecClass
 from nltk.tokenize import word_tokenize
@@ -142,17 +141,46 @@ context_inputs = tf.keras.Input(shape = (None, settings["n"],), name = "context_
 query_inputs = tf.keras.Input(shape = (None, settings["n"],), name = "query_inputs") # Each input is a matrix. And in shape, None indicates the number of timesteps, while settings["n"] is the size of each word embedding, and batch_size, defined later will be the number of words for each context
 
 # LSTM layer for Context and for Query:
-lstm_context = tf.keras.layers.LSTM(settings["n"], activation = "tanh", trainable = False) # Define an LSTM layer for context matrix of size dxT
-bidirectional_context = tf.keras.layers.Bidirectional(lstm_context)(context_inputs) # a new context matrix of size 2dxT
+lstm_context = tf.keras.layers.LSTM(settings["n"], activation = "tanh", trainable = False) # Define an LSTM LAYER for context matrix of size dxT
+bidirectional_context_layer = tf.keras.layers.Bidirectional(lstm_context) # Define BiLSTM LAYER by wrapping the lstm_context LAYER
+bidirectional_context_layer_tensor = bidirectional_context_layer(context_inputs) # context TENSOR of size 2dxT is returned by plugging an Input tensor context_inputs
 
 lstm_query = tf.keras.layers.LSTM(settings["n"], activation = "tanh", trainable = False) # Define an LSTM layer for query matrix of size dxT
-bidirectional_query = tf.keras.layers.Bidirectional(lstm_query)(query_inputs) # a new context matrix of size 2dxT
+bidirectional_query_layer = tf.keras.layers.Bidirectional(lstm_query) # Define BiLSTM LAYER by wrapping the lstm_query LAYER
+bidirectional_query_layer_tensor = bidirectional_context_layer(query_inputs) # query TENSOR of size 2dxJ is returned by plugging an Input tensor query_inputs
 
 
 
-x = tf.keras.layers.concatenate([bidirectional_context, bidirectional_query])
+# Initiate a 1x6d trainable weight vector with random weights. The shape is 1x6d since this vector will be used in multiplication with concatenated version of outputs from Context (H) and Query (U) biLSTMs: S = alpha(H, U)
+
+trainable_weight_vector = np.random.random([1, 6*settings["n"]]).astype(np.float32)
+w1 = tf.Variable(trainable_weight_vector) # trainable weight vector w1
+h = bidirectional_context_layer_tensor # Context TENSOR
+u = bidirectional_query_layer_tensor # Query TENSOR
+
+
+print(type(np.shape(h)))
+print(np.shape(u))
+
+S = []
+i_to_j_relateness = []
+for i in range(0, h.get_shape().as_list()[0]):
+    for j in range(0, u.get_shape().as_list()[0]):
+        temp = np.concatenate((h[i], u[j], np.multiply(h[i], u[j])))
+        temp = tf.convert_to_tensor(temp.T)
+        alpha = tf.keras.layers.dot(w1.read_value(), temp)
+        i_to_j_relateness.append(alpha)
+    S.append(i_to_j_relateness)
+    i_to_j_relateness = []
+S = np.array(S).reshape(i+1, j+1)
+
+
+print(np.shape(h))
+print(np.shape(u))
+
+x = tf.keras.layers.concatenate([bidirectional_context_layer_tensor, bidirectional_query_layer_tensor])
 
 model = tf.keras.Model(inputs = [context_inputs, query_inputs], outputs = x)
 model.compile(optimizer = tf.keras.optimizers.RMSprop(1e-3), loss = tf.keras.losses.BinaryCrossentropy(from_logits=True))
-model.fit({"context_inputs": np.transpose(np_Context, (0, 2, 1)), "query_inputs": np.transpose(np_Query, (0, 2, 1))}, epochs = 3)
+model.fit({"context_inputs": np.transpose(np_Context, (0, 2, 1)), "query_inputs": np.transpose(np_Query[1], (0, 2, 1))}, epochs = 3)
 #S = 
