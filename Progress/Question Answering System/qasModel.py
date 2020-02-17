@@ -12,6 +12,7 @@ import tensorflow as tf
 import json
 from word2Vec import word2vecClass
 from nltk.tokenize import word_tokenize
+from scipy.special import softmax
 
 class MyQuestionAnsweringModel(tf.keras.Model):
     
@@ -146,15 +147,13 @@ class MyQuestionAnsweringModel(tf.keras.Model):
                 
             #np_Context = np.asarray(training_context_data, dtype = np.float32) # np_Context here is the context input training_data that will be passed to the fit function of Keras Model
             #self.np_Context = np.transpose(np_Context, (0, 2, 1))
+    
     def step(self, context_train, query_train): # Each of the argument here has a shape of (num_words, n), num_words will be equal to the number of time steps, n will be equal to num_features in the input of LSTM
 
 
-        # Define inputs embeddings:
+        #_____________________________ DEFINE INPUTS EMBEDDINGS USING BILSTMs _____________________________
         
-        # Input is for context and query: each with varying number of timesteps, where a row vector of 
-        #NOT USED: context_inputs = tf.keras.Input(shape = (len(context_train.T), self.settings["n"]), name = "context_inputs") # Each input is a matrix. And in shape, None indicates the number of timesteps because the number of words in each context is different, while settings["n"] is the size of each word embedding, and batch_size, defined later will be the number of words for each context
-        #NOT USED: query_inputs = tf.keras.Input(shape = (len(query_train.T), self.settings["n"]), name = "query_inputs") # Each input is a matrix. And in shape, None indicates the number of timesteps, while settings["n"] is the size of each word embedding, and batch_size, defined later will be the number of words for each context
-        
+        # Context and query inputs to LSTM layers must each be a 3D tensor: 3D are 1 being batch size, num_words being the number of timesteps, 200 being number of features
         in_h = tf.convert_to_tensor(context_train, name = "context_inputs")
         in_h = tf.expand_dims(in_h, 0)  # Expand one more dimension to plug in the LSTM layer, which corresponds to the batch_size
         print(in_h.get_shape())
@@ -170,17 +169,17 @@ class MyQuestionAnsweringModel(tf.keras.Model):
         lstm_query = tf.keras.layers.LSTM(self.settings["n"], activation = "tanh", trainable = False, return_sequences = True) # Define an LSTM layer for query matrix of size dxT
         bidirectional_query_layer = tf.keras.layers.Bidirectional(lstm_query) # Define BiLSTM LAYER by wrapping the lstm_query LAYER
         bidirectional_query_layer_tensor = bidirectional_query_layer(in_u) # query TENSOR of size 2dxJ is returned by plugging an Input tensor query_inputs
+        #
+        #
+        #_____________________________ FORMING SIMILARITY MATRIX S _____________________________
         
         # Initiate a 1x6d trainable weight vector with random weights. The shape is 1x6d since this vector will be used in multiplication with concatenated version of outputs from Context (H) and Query (U) biLSTMs: S = alpha(H, U)
         h = bidirectional_context_layer_tensor # Context TENSOR H with shape (1, num_words, features)
         u = bidirectional_query_layer_tensor # Query TENSOR U with shape (1, num_words, features)
         
-        S = [] # S will be the similarity matrix
+        S = [] # S will be the similarity matrix, is expected to have shape (num_context_words, num_query_words)
         i_to_j_relateness = []  # This is a temporary array that stores a vector of scalars denoting similarity between all query words and one word i
-        
-        print(h.get_shape())
-        print(u.get_shape())
-        
+                
         for i in h[0]: # Index of i is the corresponding index of the word in the context
             for j in u[0]: # Index of j is the corresponding index of the word in the query
                 # i and j are of size (200,), transposing them to make them row vectors, then concatenate them with the element-wise multiplication of themselves to earn temp
@@ -191,10 +190,49 @@ class MyQuestionAnsweringModel(tf.keras.Model):
                 i_to_j_relateness.append(float(alpha[0][0])) # add the scalars alpha in, the loop ends and results in i_to_j_relateness being the similarity matrix between the word i and all the words in the query
             S.append(i_to_j_relateness)
             i_to_j_relateness = []
-        S = np.array(S) # Turn S from a list to an ndarray, then convert it to a tensor and subsequently apply softmax activation function along columns
-        S = tf.keras.activations.softmax(tf.convert_to_tensor(S, dtype=tf.float32), axis = 1)
+        S = np.array(S) # Turn S from a list to an ndarray of size (num_context_words, num_query_words)
+        #
+        #
+        #_____________________________ FORMING CONTEXT TO QUERY MATRIX FROM S _____________________________
         
+        A = tf.keras.activations.softmax(tf.convert_to_tensor(S, dtype=tf.float32), axis = 1) # A, of size (num_context_words, num_query_words), is the distribution of similarities between of words in context and in queries
+        c2q = []
+        m = 0
+        for i in A: # i is of shape (1, num_query_words)
+            for j in i: # j is a scalar
+                print(u[0][m].get_shape())
+                if m == 0:
+                    sum_of_weighted_query = tf.math.scalar_mul(j, u[0][m]) # sum_of_weighted_queryTrain is of shape (1, d = 200)
+                else:
+                    sum_of_weighted_query += tf.math.scalar_mul(j, u[0][m])
+                m +=1
+            m = 0
+            c2q.append(sum_of_weighted_query) # U_Context is expected to be of shape (200, num_context_words)
+        c2q = tf.convert_to_tensor(np.array(c2q).T)
+        #
+        #
+        #_____________________________ FORMING QUERY TO CONTEXT MATRIX FROM S _____________________________
         
+        z = [] # z is a vector whose elements are each max of the corresponding row in similarity matrix S
+        for i in S:
+            z.append(np.amax(i))
+        b = softmax(z) # apply softmax on all elements of z and store in b. b is of shape (1, num_context_words)
+        m = 0
+        q2c = []
+        for scalar in b:
+            if m == 0:
+                sum_of_weighted_context = tf.math.scalar_mul(scalar, h[0][m])
+            else:
+                sum_of_weighted_context += tf.math.scalar_mul(scalar, h[0][m])
+            m += 1
+        for scalar in b:
+            q2c.append(sum_of_weighted_context) # duplicate num_words_query times the row vector of shape (1, 200)
+        q2c = tf.convert_to_tensor(np.array(q2c).T)
+        #
+        #
+        #_____________________________ MEGAMERGE MATRICES: H, C2Q AND Q2C _____________________________
+        
+    """    
     def iterating(self, h_2D, query):
         self.S.append(tf.map_fn(lambda x: self.concatenate(x, h_2D), query))
         
@@ -204,7 +242,7 @@ class MyQuestionAnsweringModel(tf.keras.Model):
         alpha = tf.keras.layers.dot(self.w1.read_value(), temp)
         i_to_j_relateness.append(alpha)
         return i_to_j_relateness
-
+"""
         
 if __name__ == "__main__":
     myModel = MyQuestionAnsweringModel()
