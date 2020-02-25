@@ -30,17 +30,26 @@ class OutputLayer(layers.Layer):
         super(OutputLayer, self).build(input_shapes)
     
     def call(self, inputs):
-        p1 = []
-        p2 = []
-        for i in inputs["G_M1"]:
-            # i is of shape (10n, )
-            scalar = tf.tensordot(self.wp1.read_value(), tf.transpose(i), 1)
-            p1.append(float(scalar[0]))
+        m = 0
+        for i in inputs["G_M1"]: # i is of shape (10d, )
+            scalar = tf.tensordot(self.wp1, tf.expand_dims(i, 1), 1)
+            if m == 0:
+                p1 = scalar
+            else:
+                p1 = tf.concat((p1, scalar), 1)
+            m += 1
+        m = 0
         for i in inputs["G_M2"]:
-            scalar = tf.tensordot(self.wp2.read_value(), tf.transpose(i), 1)
-            p2.append(float(scalar[0]))
-        p1_pred = tf.convert_to_tensor(softmax(p1))
-        p2_pred = tf.convert_to_tensor(softmax(p2))
+            scalar = tf.tensordot(self.wp2, tf.expand_dims(i, 1), 1)
+            if m == 0:
+                p2 = scalar
+            else:
+                p2 = tf.concat((p2, scalar), 1)
+            m += 1
+        
+        p1_pred = tf.nn.softmax(p1)
+        p2_pred = tf.nn.softmax(p2)
+        
         return p1_pred, p2_pred
     
 if __name__ == "__main__":

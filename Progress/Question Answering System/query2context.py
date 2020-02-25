@@ -18,12 +18,12 @@ class Query2Context(layers.Layer):
         super(Query2Context, self).build(input_shape)
     
     def call(self, h, s): # Query2Context takes as inputs the biLSTM embeddings h of size (1, max_context_length, features = 2n) and the similarity matrix of size (max_context_length, max_query_length) from the similarity layer
-        z = []  # z, of size (1, num_context_words) is a vector whose elements are each max of the corresponding row in similarity matrix S. z encapsulates the Query word that is most
+                # z, of size (1, num_context_words) is a vector whose elements are each max of the corresponding row in similarity matrix S. z encapsulates the Query word that is most
                 # relevant to each  Context word (here, only Context words that are really relevant to a query will be shown in z by their high similarity value, and for 
                 # Context words that cannot pay tribute to the answer, they will be neglect and assigned values close to zero)
-        for i in s:
-            z.append(np.amax(i))
-        b = softmax(z) # apply softmax on all elements of z and store in b. b is of shape (1, num_context_words)
+        
+        z1 = tf.keras.backend.max(s, axis = -1) # Take max at each row to generate a column vector z1
+        b = tf.nn.softmax(z1) # apply softmax on all elements of z and store in b. b is of shape (1, num_context_words)
         m = 0
         q2c = []
         for scalar in b:
@@ -38,7 +38,13 @@ class Query2Context(layers.Layer):
             else:
                 sum_of_weighted_context += tf.math.scalar_mul(scalar, h[0][m])
             m += 1
+        m = 0
+        sum_of_weighted_context = tf.expand_dims(sum_of_weighted_context, 1)
         for scalar in b:
-            q2c.append(sum_of_weighted_context) # duplicate the row vector sum_of_weighted_context of shape (1, 200) for num_words_query times
-        q2c = tf.convert_to_tensor(np.array(q2c).T) # q2c is of size (200, T), encapsulates information about the most important words in the Context w.r.t the Query
+            if m == 0:
+                q2c = sum_of_weighted_context
+            else:
+                q2c = tf.concat((q2c, sum_of_weighted_context), 1) # duplicate the row vector sum_of_weighted_context of shape (200,) for num_words_query times
+            m += 1
+          # q2c is of size (200, T), encapsulates information about the most important words in the Context w.r.t the Query
         return q2c

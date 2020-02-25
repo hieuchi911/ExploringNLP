@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Tue Feb 25 21:40:27 2020
+
+@author: Admin
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Tue Feb 11 13:34:14 2020
 
 @author: Admin
@@ -19,7 +26,7 @@ from query2context import Query2Context
 from megamerge import MegaMerge
 from outputlayer import OutputLayer
 
-class MyQuestionAnsweringModel(tf.keras.Model):
+class MyQuestionAnsweringModel():
     
     def __init__(self):
         super(MyQuestionAnsweringModel, self).__init__()
