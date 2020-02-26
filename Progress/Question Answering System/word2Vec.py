@@ -46,7 +46,7 @@ class word2vecClass():
         sentence = []
         for word in self.tokenizedCorpus:
             # The dot "." is used to indicate end of a sentence, which will stop the generator from continuing generating words
-            if word == ".":
+            if word == "." or word == "?":
                 self.cleanToken.append(sentence)
             elif word not in weirdlist:
                 sentence.append(word)

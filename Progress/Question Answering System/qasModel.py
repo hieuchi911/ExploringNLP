@@ -19,7 +19,7 @@ from query2context import Query2Context
 from megamerge import MegaMerge
 from outputlayer import OutputLayer
 
-class MyQuestionAnsweringModel(tf.keras.Model):
+class MyQuestionAnsweringModel():
     
     def __init__(self):
         super(MyQuestionAnsweringModel, self).__init__()
