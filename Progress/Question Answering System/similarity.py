@@ -34,8 +34,6 @@ class Similarity(layers.Layer):
         for i in range(h[0].get_shape()[0]): # Index of i is the corresponding index of the word in the context
             count += 1
             m = 0
-            print("Shape is: ", h[0].get_shape()[0])
-            print("count: ", count)
             for j in range(u[0].get_shape()[0]): # Index of j is the corresponding index of the query word
                 # i and j are of size (200,), transposing them to make them row vectors, then concatenate them with the element-wise multiplication of themselves to earn temp
                 temp = tf.concat((h[0][i], u[0][j], tf.math.multiply(h[0][i], u[0][j])), 0) # temp shape is (600,) so we have to expand it to (600, 1) -> Use expand_dims
@@ -53,7 +51,8 @@ class Similarity(layers.Layer):
                 S = tf.concat((S, i_to_j_relateness), 0)
             #i_to_j_relateness = 0
             m = 0
-        print("Finished forming Similarity matrix")
+        print("S is: ", S)
+        print("Finished forming Similarity matrix: " + str(S.get_shape()) + "\n")
         return S    # S is the similarity of size (max_context_length, max_query_length)
     
 

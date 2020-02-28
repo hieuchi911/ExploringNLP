@@ -22,12 +22,8 @@ class MegaMerge(layers.Layer):
         G = 0.0
         
         for c in range(0, max_context_length):
-            print(h[0][c])
-            print(tf.transpose(c2q)[c])
-            print(tf.transpose(q2c)[c])
             # beta below is a row vector of size (1, 800)
             beta = tf.concat((tf.expand_dims(h[0][c], 1), tf.expand_dims(tf.transpose(c2q)[c], 1), tf.math.multiply(tf.expand_dims(h[0][c], 1), tf.expand_dims(tf.transpose(c2q)[c], 1)), tf.math.multiply(tf.expand_dims(h[0][c], 1), tf.expand_dims(tf.transpose(q2c)[c], 1))), 0) # 0 here indicates that concatenation is done along rows, since each element in the concatenate func is of size (200,)
-            print("finish ", c)
             if c == 0:
                 G = beta                    # G, after being transposed to be of size (800, num_context_words), is the QUERY-AWARE REPRESENTATION of ALL CONTEXT WORDS, where each column
                                             # vector is a concatenation of the Context word itself, the query-context-relevance subvector and the importance-to-query
@@ -35,5 +31,6 @@ class MegaMerge(layers.Layer):
                                             # has incorporated-and-relevant information from the Query.
             else:
                 G = tf.concat((G, beta), 1)
-        print("Finished megamerging H, C2Q and Q2C")
+        print("G is: ", G)
+        print("Finished megamerging H, C2Q and Q2C to G: " + str(G.get_shape()) + "\n")
         return G

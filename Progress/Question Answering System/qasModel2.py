@@ -19,7 +19,6 @@ import tensorflow as tf
 import json
 from word2Vec import word2vecClass
 from nltk.tokenize import word_tokenize
-import math
 from similarity import Similarity
 from context2query import Context2Query
 from query2context import Query2Context
@@ -29,6 +28,7 @@ from outputlayer import OutputLayer
 class MyQuestionAnsweringModel():
     
     def __init__(self, max_context_length, max_query_length):
+        print("IN THE __INIT__ FUNCTION HEYYYYYYYYYY\n\n\n")
         self.max_context_length = max_context_length
         self.max_query_length = max_query_length
         self.settings = {'window_size': 2, 'n': 100, 'epochs': 5, 'learning_rate': 0.001}
@@ -141,8 +141,6 @@ class MyQuestionAnsweringModel():
         print("_______________________CONTEXTS__________________________ \n\n" + ContextCorpus)
         
         print("_______________________QUERIES__________________________ \n\n" + QueryCorpus)
-        print(type(ContextCorpus))
-        print(type(QueryCorpus))
         
         self.wordEmbeddingQuery = word2vecClass(self.settings, QueryCorpus)
         self.wordEmbeddingQuery.tokenizeCorpus()
@@ -174,11 +172,11 @@ class MyQuestionAnsweringModel():
                     # Also, w1 shape is (num_words, d = n) so we have to convert np.ndarray to list, so we can subsequently convert the list to tensor
                     inputContext.append(self.wordEmbeddingContext.w1[self.wordEmbeddingContext.getIndexFromWord(word)].tolist())
                 for q in range(len(Context), self.max_context_length):  # append zeros to the end of each context embedding to gain a coherent size of (max_context_words, n)
-                    self.np_Context.append(np.zeros(self.settings["n"]))
+                    inputContext.append(np.zeros(self.settings["n"]))
                 inputContext = np.asarray(inputContext, dtype = np.float32) # inputContext now is a matrix representation of the current context, and it has shape of (num_context_words, n)
                 self.np_Context.append(inputContext)
                 inputContext = [] # After appending one context matrix, clear it then append the next context matrices
-                print(context["context"])
+                print("Building context embedding from this context: \n\t" + context["context"] + "\n")
                 # For each of queries about given Context, create word2vec embedding for that query
                 for query in context["qas"]:
                     Query = self.tokenizeCorpus(query["question"])
@@ -187,18 +185,20 @@ class MyQuestionAnsweringModel():
                         # Also, w1 shape is (num_words, d = n) so we have to convert np.ndarray to list, so we can subsequently convert the list to tensor
                         inputQuery.append(self.wordEmbeddingQuery.w1[self.wordEmbeddingQuery.wordIndex[word]].tolist()) # shape of inputQuery is (num_words, n)
                     for q in range(len(Query), self.max_query_length):# append zeros to the end of each query embedding to gain a coherent size of (max_query_words, n)
-                        self.np_Query.append(np.zeros(self.settings["n"]))
+                        inputQuery.append(np.zeros(self.settings["n"]))
                     inputQuery = np.asarray(inputQuery, dtype = np.float32) # inputQuery now is a matrix representation of the current query, and it has shape of (num_query_words, n)
-                    self.np_Query.append({"question": inputQuery, "answer": query["answers"][0]["text"], "start index": query["answers"][0]["answer_start"]})
-                    
+                    self.np_Query.append({"question": inputQuery, "answer": query["answers"][0]["text"], "start index": query["answers"][0]["answer_start"], "query_text": query["question"]})
                     inputQuery = [] # After appending one question matrix, clear it then append the next query matrices
+                    print("Building query embedding from this query: \n\t\t" + query["question"])
                 self.np_Query.append(np.array([0]))     # This indicates the end of the questions series related to the context 
+                
                  
             #np_Context = np.asarray(training_context_data, dtype = np.float32) # np_Context here is the context input training_data that will be passed to the fit function of Keras Model
             #self.np_Context = np.transpose(np_Context, (0, 2, 1))
         
 
-    def train(self, query_real_answer, context_index):
+    def train(self, context, query_text, query, query_real_answer, context_index):
+        print("\n\n________________TRAINING WITH THE FOLLOWING CONTEXT-QUERY-ANSWER________________\n\n")
         tokenized = word_tokenize(query_real_answer)
         tokenized_answer = []
         weirdlist = [".", ",", "'","\"", "!", "?", "'", "-", "[", "]", ":", "''", "``", ")", "("]
@@ -211,7 +211,7 @@ class MyQuestionAnsweringModel():
         save = 0
         save1 = 0
         for i in range(0, len(self.Contexts_list[context_index]["tokenized_context"])):
-            if self.Contexts_list[context_index]["tokenized_context"][i] == tokenized_answer[0]:
+            if self.Contexts_list[context_index]["tokenized_context"][i] == tokenized_answer[0]: # Compare the words in the context at index [context_index] in the self.Contexts_list with the words in the answer tokenized_answer
                 save = i
                 if len(tokenized_answer) > 1:
                     for j in range(1, len(tokenized_answer)):
@@ -231,30 +231,48 @@ class MyQuestionAnsweringModel():
                     
         start_index_real = save
         end_index_real = save1
+        indices = np.expand_dims(np.asarray([start_index_real, end_index_real]), 0)
         
-        print("Real answer is: ", self.Contexts_list[context_index]["tokenized_context"][save:save1])
+        print("\n___Context: ", self.Contexts_list[context_index]["context_string"])
+        print("\n___Question: ", query_text)
+        print("\n___Correct answer: ", query_real_answer)
+        print("\n___Correct answer extracted from indices in the context: ", self.Contexts_list[context_index]["tokenized_context"][save:save1])
         
-        self.model.fit({"context_input": self.np_Context, "query_input": self.np_Query}, {"output_indices": [start_index_real, end_index_real]})
+        
+        np_Context = np.expand_dims(context, 0)
+        print(np.shape(np_Context))
+        np_Query = np.expand_dims(query, 0)
+        print(np.shape(np_Query))
+        self.model.fit({"context_input": np_Context, "query_input": np_Query}, {"output_indices": indices})
         
 def some_loss_function(real_answer_indices, prob_start_and_end):
+    print("\n\n___IN THE LOSS FUNCTION___\nBelow is either called from Compiling phase or from Training phase, if in former phase, these information is abstract, else, it is specific instances\n\n")
     def compute_log_loss(true_and_pred):
         real_answer_indices, p1_pred, p2_pred = true_and_pred
-        start_prob = p1_pred[tf.cast(real_answer_indices[0], tf.int32)]
-        end_prob = p2_pred[tf.cast(real_answer_indices[1], tf.int32)]
+        print("\nTo compare with p1_pred before calling inner function conpute_log_loss, p1_pred is: ", p1_pred)
+        print("To compare with p2_pred before calling inner function conpute_log_loss, p2_pred is: ", p2_pred)
+        print("\nIn inner function, real_answer_indices is now: ", tf.keras.backend.cast(real_answer_indices[0], dtype = 'int32'))
+        real_answer_indices_1 = tf.expand_dims(tf.keras.backend.cast(real_answer_indices[0], dtype = 'int32'), 0)
+        real_answer_indices_2 = tf.expand_dims(tf.keras.backend.cast(real_answer_indices[1], dtype = 'int32'), 0)
+        print("indices 1:", real_answer_indices_1)
+        start_prob = tf.gather(p1_pred, real_answer_indices_1)
+        end_prob = tf.gather(p2_pred, real_answer_indices_2)
         
         return -(tf.keras.backend.log(start_prob) + tf.keras.backend.log(end_prob))
     print("\n\nprob_start_and_end is: ", prob_start_and_end)
-    print("real start: ", real_answer_indices[0])
-    print("real end: ", real_answer_indices[1])
-    p1_pred = prob_start_and_end[0][0]
-    p2_pred = prob_start_and_end[0][1]
-    prob = tf.keras.map_fn(compute_log_loss, (real_answer_indices, p1_pred, p2_pred), dtype = 'float32')
+    print("Before inner function, real start: ", real_answer_indices[0][0])
+    print("\t\t\treal end: ", real_answer_indices[0][1])
+    p1_pred = tf.expand_dims(prob_start_and_end[0][0], 0) # since prob_start_and_end[0][0] is of size (200,), this when passed to compute_log_loss, will be decreased by 1 dimension, making its shape to be (), and 
+    p2_pred = tf.expand_dims(prob_start_and_end[0][1], 0)
+    
+    print("\nFrom some_loss_function, before calling conpute_log_loss, p1_pred is: ", p1_pred)
+    print("From some_loss_function, before calling conpute_log_loss, p2_pred is: ", p2_pred)
+    prob = tf.keras.backend.map_fn(compute_log_loss, (real_answer_indices, p1_pred, p2_pred), dtype = 'float32')
     return tf.keras.backend.mean(prob, axis = 0)
     
         
 
 myModel = MyQuestionAnsweringModel(120, 15)
-    
 if __name__ == "__main__":
     context_index = 0
     for i in myModel.np_Context:
@@ -263,7 +281,8 @@ if __name__ == "__main__":
                 print("break!!!")
                 break
             else:
-                myModel.train(myModel, i, j["question"], j["answer"], context_index)
+                myModel.train(i, j["query_text"], j["question"], j["answer"], context_index)
+                
                 break
         context_index += 1
   

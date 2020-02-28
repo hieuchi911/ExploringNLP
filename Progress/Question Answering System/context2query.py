@@ -35,6 +35,6 @@ class Context2Query(layers.Layer):
             else:
                 c2q = tf.concat((c2q, tf.expand_dims(sum_of_weighted_query, 0)), 0) # c2q is expected to be of shape (200, num_context_words) -> need to take transpose
         c2q = tf.transpose(c2q) # c2q is now a tensor of size (200, T), encapsulates the RELEVANCE of each Query word to each Context word
-        print("Finished forming C2Q matrix")
-        print("c2q is of: ", c2q)
+        print("C2Q is: ", c2q)
+        print("Finished forming C2Q matrix: " + str(c2q.get_shape()) + "\n")
         return c2q

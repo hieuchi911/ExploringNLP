@@ -17,8 +17,6 @@ class OutputLayer(layers.Layer):
     def build(self, input_shapes):
         shape_wp1 = input_shapes["G_M1"][-1]
         shape_wp2 = shape_wp1
-        print(type(input_shapes["G_M1"]))
-        print(shape_wp1)
         self.wp1 = self.add_weight(name = "Start_index_pred",
                                    shape = (1, shape_wp1),
                                    initializer = "random_normal",
@@ -53,6 +51,8 @@ class OutputLayer(layers.Layer):
         p2_pred = tf.nn.softmax(p2)
         output_final = tf.keras.backend.stack([p1_pred, p2_pred], axis = 1)
         
+        print("Output_final is: ", output_final)
+        print("Finished forming prediction vectors: " + str(output_final.get_shape()) + "\n")
         return output_final
     
 if __name__ == "__main__":

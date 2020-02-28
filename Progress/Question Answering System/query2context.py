@@ -49,6 +49,6 @@ class Query2Context(layers.Layer):
                 q2c = tf.concat((q2c, sum_of_weighted_context), 1) # duplicate the row vector sum_of_weighted_context of shape (200,) for num_words_query times
             m += 1
           # q2c is of size (200, T), encapsulates information about the most important words in the Context w.r.t the Query
-        print("Finished forming Q2C matrix")
-        print("c2q is of: ", q2c)
+        print("Q2C is: ", q2c)
+        print("Finished forming Q2C matrix: " + str(q2c.get_shape()) + "\n")
         return q2c
