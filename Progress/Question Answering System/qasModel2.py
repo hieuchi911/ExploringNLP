@@ -157,47 +157,50 @@ class MyQuestionAnsweringModel():
         # wordEmbeddingContext.w1 now contains num_word row vectors, each of which has a size of settings["n"]
         
         
-        
+        self.count = []
         self.np_Context = []
         self.np_Query = []
         self.Contexts_list = []
-        for i in range(1):
-            for context in data["data"][0]["paragraphs"][0:1]:
-                
-                # Create word2vec embedding for a Context
-                Context = self.tokenizeCorpus(context["context"])  
-                self.Contexts_list.append({"tokenized_context": Context, "context_string": context["context"]})
-                for word in Context:
+        temp_count = 0
+        for context in data["data"][0]["paragraphs"][0:1]:
+            # Create word2vec embedding for a Context
+            Context = self.tokenizeCorpus(context["context"])  
+            self.Contexts_list.append({"tokenized_context": Context, "context_string": context["context"]})
+            for word in Context:
+                # append a word vector from wordEmbeddingContext by taking the row of w1 at "proper "index. 
+                # Also, w1 shape is (num_words, d = n) so we have to convert np.ndarray to list, so we can subsequently convert the list to tensor
+                inputContext.append(self.wordEmbeddingContext.w1[self.wordEmbeddingContext.getIndexFromWord(word)].tolist())
+            for q in range(len(Context), self.max_context_length):  # append zeros to the end of each context embedding to gain a coherent size of (max_context_words, n)
+                inputContext.append(np.zeros(self.settings["n"]))
+            inputContext = np.asarray(inputContext, dtype = np.float32) # inputContext now is a matrix representation of the current context, and it has shape of (num_context_words, n)
+            print("Building context embedding from this context: \n\t" + context["context"] + "\n")
+            # For each of queries about given Context, create word2vec embedding for that query
+            for query in context["qas"]:
+                temp_count += 1
+                Query = self.tokenizeCorpus(query["question"])
+                for word in Query:
                     # append a word vector from wordEmbeddingContext by taking the row of w1 at "proper "index. 
                     # Also, w1 shape is (num_words, d = n) so we have to convert np.ndarray to list, so we can subsequently convert the list to tensor
-                    inputContext.append(self.wordEmbeddingContext.w1[self.wordEmbeddingContext.getIndexFromWord(word)].tolist())
-                for q in range(len(Context), self.max_context_length):  # append zeros to the end of each context embedding to gain a coherent size of (max_context_words, n)
-                    inputContext.append(np.zeros(self.settings["n"]))
-                inputContext = np.asarray(inputContext, dtype = np.float32) # inputContext now is a matrix representation of the current context, and it has shape of (num_context_words, n)
+                    inputQuery.append(self.wordEmbeddingQuery.w1[self.wordEmbeddingQuery.wordIndex[word]].tolist()) # shape of inputQuery is (num_words, n)
+                for q in range(len(Query), self.max_query_length):# append zeros to the end of each query embedding to gain a coherent size of (max_query_words, n)
+                    inputQuery.append(np.zeros(self.settings["n"]))
+                inputQuery = np.asarray(inputQuery, dtype = np.float32) # inputQuery now is a matrix representation of the current query, and it has shape of (num_query_words, n)
+                self.np_Query.append({"question": inputQuery, "answer": query["answers"][0]["text"], "query_text": query["question"]})
                 self.np_Context.append(inputContext)
-                inputContext = [] # After appending one context matrix, clear it then append the next context matrices
-                print("Building context embedding from this context: \n\t" + context["context"] + "\n")
-                # For each of queries about given Context, create word2vec embedding for that query
-                for query in context["qas"]:
-                    Query = self.tokenizeCorpus(query["question"])
-                    for word in Query:
-                        # append a word vector from wordEmbeddingContext by taking the row of w1 at "proper "index. 
-                        # Also, w1 shape is (num_words, d = n) so we have to convert np.ndarray to list, so we can subsequently convert the list to tensor
-                        inputQuery.append(self.wordEmbeddingQuery.w1[self.wordEmbeddingQuery.wordIndex[word]].tolist()) # shape of inputQuery is (num_words, n)
-                    for q in range(len(Query), self.max_query_length):# append zeros to the end of each query embedding to gain a coherent size of (max_query_words, n)
-                        inputQuery.append(np.zeros(self.settings["n"]))
-                    inputQuery = np.asarray(inputQuery, dtype = np.float32) # inputQuery now is a matrix representation of the current query, and it has shape of (num_query_words, n)
-                    self.np_Query.append({"question": inputQuery, "answer": query["answers"][0]["text"], "start index": query["answers"][0]["answer_start"], "query_text": query["question"]})
-                    inputQuery = [] # After appending one question matrix, clear it then append the next query matrices
-                    print("Building query embedding from this query: \n\t\t" + query["question"])
-                self.np_Query.append(np.array([0]))     # This indicates the end of the questions series related to the context 
-                
-                 
-            #np_Context = np.asarray(training_context_data, dtype = np.float32) # np_Context here is the context input training_data that will be passed to the fit function of Keras Model
-            #self.np_Context = np.transpose(np_Context, (0, 2, 1))
+                inputQuery = [] # After appending one question matrix, clear it then append the next query matrices
+                print("Building query embedding from this query: \n\t\t" + query["question"])
+            inputContext = [] # After appending one context matrix, clear it then append the next context matrices
+            self.count.append(temp_count)
+            print("self.count is: ", self.count)
+            temp_count = 0
+        print("FINISHED EXTRACTING EMBEDDINGS FOR CONTEXT AND QUERIES, THEY RESPECTIVELY ARE OF SHAPES:\n\n")
+        print(np.shape(self.np_Context))
+        print(np.shape(self.np_Query))
+        #np_Context = np.asarray(training_context_data, dtype = np.float32) # np_Context here is the context input training_data that will be passed to the fit function of Keras Model
+        #self.np_Context = np.transpose(np_Context, (0, 2, 1))
         
 
-    def train(self, context, query_text, query, query_real_answer, context_index):
+    def find_real_answer_indices(self, query_text, query_real_answer, context_index):
         print("\n\n________________TRAINING WITH THE FOLLOWING CONTEXT-QUERY-ANSWER________________\n\n")
         tokenized = word_tokenize(query_real_answer)
         tokenized_answer = []
@@ -231,18 +234,26 @@ class MyQuestionAnsweringModel():
                     
         start_index_real = save
         end_index_real = save1
-        indices = np.expand_dims(np.asarray([start_index_real, end_index_real]), 0)
         
         print("\n___Context: ", self.Contexts_list[context_index]["context_string"])
         print("\n___Question: ", query_text)
         print("\n___Correct answer: ", query_real_answer)
         print("\n___Correct answer extracted from indices in the context: ", self.Contexts_list[context_index]["tokenized_context"][save:save1])
+        return [start_index_real, end_index_real]
+        
+    def train(self, indices):
+        print("========================READY TO TRAIN NOW\n\n\n")
+        np_Context = np.asarray(self.np_Context)
+        print("np_Context is: ", np.shape(np_Context))
+        np_Query = []
+        for i in self.np_Query:
+            np_Query.append(i["question"])
+        np_Query = np.asarray(np_Query)
+        print("np_Query is: ", np.shape(np_Query))
+        
+        print("indices is: ", np.shape(indices))
         
         
-        np_Context = np.expand_dims(context, 0)
-        print(np.shape(np_Context))
-        np_Query = np.expand_dims(query, 0)
-        print(np.shape(np_Query))
         self.model.fit({"context_input": np_Context, "query_input": np_Query}, {"output_indices": indices})
         
 def some_loss_function(real_answer_indices, prob_start_and_end):
@@ -272,17 +283,12 @@ def some_loss_function(real_answer_indices, prob_start_and_end):
     
         
 
-myModel = MyQuestionAnsweringModel(120, 15)
+
 if __name__ == "__main__":
-    context_index = 0
-    for i in myModel.np_Context:
-        for j in myModel.np_Query:
-            if np.shape(j) == (1,): # This is when j is an array of size (1,), which indicates that the next j's are for the next context, so we must change context (change i)
-                print("break!!!")
-                break
-            else:
-                myModel.train(i, j["query_text"], j["question"], j["answer"], context_index)
-                
-                break
-        context_index += 1
-  
+    myModel = MyQuestionAnsweringModel(120, 15)
+    indices = []
+    for i in range(0, len(myModel.count)):
+        for j in range(0, myModel.count[i]):
+            indices.append(myModel.find_real_answer_indices(myModel.np_Query[j]["query_text"], myModel.np_Query[j]["answer"], i))
+    myModel.train(np.asarray(indices))
+    tf.saved_model.save(myModel, "System")
