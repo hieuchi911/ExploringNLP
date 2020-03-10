@@ -17,7 +17,7 @@ path to train file: "/content/drive/My Drive/QaSModel/Question Answering System/
 import numpy as np
 import tensorflow as tf
 import json
-from word2Vec import word2vecClass
+from nnWord2vec import word2vec
 from nltk.tokenize import word_tokenize
 from similarity import Similarity
 from context2query import Context2Query
@@ -32,6 +32,7 @@ class MyQuestionAnsweringModel():
         self.max_query_length = max_query_length
         self.settings = {'window_size': 2, 'n': 100, 'epochs': 5, 'learning_rate': 0.0001}
         
+        self.extract_training_inputs("Question Answering System\\Training and testing data")
         
         #input_h = tf.keras.Input(shape = (self.max_context_length, self.settings["n"]), dtype = "float32", name = "context_input")
         #input_u = tf.keras.Input(shape = (self.max_query_length, self.settings["n"]), dtype = "float32", name = "query_input")
@@ -138,13 +139,13 @@ class MyQuestionAnsweringModel():
         print("_______________________QUERIES__________________________ \n\n" + QueryCorpus)
         
         
-        self.wordEmbeddingContext = word2vecClass(self.settings, ContextCorpus)
+        self.wordEmbeddingContext = word2vec(self.settings, ContextCorpus)
         self.wordEmbeddingContext.tokenizeCorpus()
         self.wordEmbeddingContext.buildVocabulary()
         self.wordEmbeddingContext.train(self.wordEmbeddingContext.generate_training_data())
         # wordEmbeddingContext.w1 now contains num_word row vectors, each of which has a size of settings["n"]
         
-        self.wordEmbeddingQuery = word2vecClass(self.settings, QueryCorpus)
+        self.wordEmbeddingQuery = word2vec(self.settings, QueryCorpus)
         self.wordEmbeddingQuery.tokenizeCorpus()
         self.wordEmbeddingQuery.buildVocabulary()
         self.wordEmbeddingQuery.train(self.wordEmbeddingQuery.generate_training_data())
@@ -381,7 +382,7 @@ def some_accuracy_metric(real_answer_indices, prob_start_and_end):
 
 if __name__ == "__main__":
     myModel = MyQuestionAnsweringModel(114, 20)
-    myModel.extract_training_inputs("/content/drive/My Drive/QaSModel/Question Answering System/Training and testing data/light-training-data.json")
+    #myModel.extract_training_inputs("Question Answering System\Training and testing data")
     passage = "Beyonc\u00e9 Giselle Knowles-Carter (/bi\u02d0\u02c8j\u0252nse\u026a/ bee-YON-say) (born September 4, 1981) is an American singer, songwriter, record producer and actress. Born and raised in Houston, Texas, she performed in various singing and dancing competitions as a child, and rose to fame in the late 1990s as lead singer of R&B girl-group Destiny's Child. Managed by her father, Mathew Knowles, the group became one of the world's best-selling girl groups of all time. Their hiatus saw the release of Beyonc\u00e9's debut album, Dangerously in Love (2003), which established her as a solo artist worldwide, earned five Grammy Awards and featured the Billboard Hot 100 number-one singles \"Crazy in Love\" and \"Baby Boy\"."
     question = "When did Beyonc\u00e9 release Dangerously in Love?"
     myModel.predict_answer(passage, question)
